@@ -9,7 +9,7 @@
 class Button {
   /**
    * Minimal representation of a hardware button.
-   * Supports registering "callback" functions that are triggered on press.
+   * Supports registering "callback" functions that are triggered on press
    * Can be moved into a interface later perhaps?
    */
 public:
