@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_executable(ocr_app src/main.cpp)
 target_link_libraries(ocr_app display)
 
-#add_library(display display/display.cpp)
+add_library(display display/Display.cpp)
 
 # Camera Hello
 add_executable(camera_hello camera/hello.cpp)

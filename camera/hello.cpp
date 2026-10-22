@@ -45,7 +45,10 @@ int main(){
     streamConfig.size.width = 640;
     streamConfig.size.height = 480;
     */
-    camera->configure(streamConfig);
+
+    config->validate();
+    std::cout << "Validated config: " << streamConfig.toString() << std::endl;
+    camera->configure(config.get());
 
     // Stop CameraManager before quitting (Currently creates segmentation fault - I'll deal with that later... :-/ )
     camera->release();
