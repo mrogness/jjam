@@ -50,8 +50,10 @@ int main(){
     std::cout << "Validated config: " << streamConfig.toString() << std::endl;
     camera->configure(config.get());
 
-    // Stop CameraManager before quitting (Currently creates segmentation fault - I'll deal with that later... :-/ )
+    // Cleanup
+    camera->stop();
     camera->release();
+    camera.reset();
     camManager->stop();
     return 0;
 }
