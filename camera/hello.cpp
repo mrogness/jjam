@@ -50,8 +50,22 @@ int main(){
     std::cout << "Validated config: " << streamConfig.toString() << std::endl;
     camera->configure(config.get());
 
+    // Allocate frame buffer
+    auto allocator = std::make_unique<FrameBufferAllocator>(camera);
+    for(StreamConfiguration &cfg : *config){
+        int ret = allocator->allocate(cfg.stream());
+        if(ret < 0){
+            std::cerr << "Couldn't allocate buffers\n";
+            return -ENOMEM;
+        }
+
+        size_t allocated = allocator->buffers(cfg.stream()).size();
+        std::cout << "Allocated " << allocated << " buffers for stream\n";
+    }
+
     // Cleanup
     camera->stop();
+    allocator.reset();
     camera->release();
     camera.reset();
     camManager->stop();
