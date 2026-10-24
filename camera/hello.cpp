@@ -125,6 +125,15 @@ int main(){
     // Add connection to a completed request
     camera->requestCompleted.connect(requestComplete);
 
+    // All ready. Get started, queue requests
+    camera->start();
+    for(std::unique_ptr<Request> &request : requests){
+        camera->queueRequest(request.get());
+    }
+
+    // libcamera starts in its own thread; let it do its thing before shutting down
+    std::this_thread::sleep_for(3000ms);
+
     // Cleanup
     camera->stop();
     allocator->free(stream);
