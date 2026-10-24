@@ -2,17 +2,50 @@
 #include <iostream>
 #include <libcamera/framebuffer.h>
 #include <libcamera/request.h>
+#include <map>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include <libcamera/libcamera.h>
-#include <vector>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
 
 // Required to store and share all available cameras through libcamera
 static std::shared_ptr<Camera> camera;
+
+static void requestComplete(Request *request){
+    // Ignore if the request was cancelled
+    if(request->status() == Request::RequestCancelled){
+        return;
+    }
+
+    // Get map of frame buffers
+    const std::map<const Stream *, FrameBuffer *> &buffers = request->buffers();
+
+    // Iterate to access metadata and contents of buffers
+    for(auto bufferPair : buffers){
+        FrameBuffer *buffer = bufferPair.second;
+        const FrameMetadata &metadata = buffer->metadata();
+
+        // Print details
+        std::cout << "seq: " << std::setw(6) << std::setfill('0') << metadata.sequence << " bytesused: ";
+        unsigned int nplane = 0;
+        for(const FrameMetadata::Plane &plane : metadata.planes()){
+            std::cout << plane.bytesused;
+            if(++nplane < metadata.planes().size()){
+                std::cout << "/";
+            }
+        }
+
+        std::cout << std::endl;
+    }
+
+    // Reuse buffers and request
+    request->reuse(Request::ReuseBuffers);
+    camera->queueRequest(request);
+}
 
 int main(){
     // Create CameraManager
@@ -88,6 +121,9 @@ int main(){
 
         requests.push_back(std::move(request));
     }
+
+    // Add connection to a completed request
+    camera->requestCompleted.connect(requestComplete);
 
     // Cleanup
     camera->stop();
