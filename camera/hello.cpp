@@ -1,9 +1,12 @@
 #include <iomanip>
 #include <iostream>
+#include <libcamera/framebuffer.h>
+#include <libcamera/request.h>
 #include <memory>
 #include <thread>
 
 #include <libcamera/libcamera.h>
+#include <vector>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
@@ -63,8 +66,32 @@ int main(){
         std::cout << "Allocated " << allocated << " buffers for stream\n";
     }
 
+    // Get frame buffers using stream object, initialize vector to send requests
+    Stream *stream = streamConfig.stream();
+    const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
+    std::vector<std::unique_ptr<Request>> requests;
+
+    // Create requests
+    for(unsigned int i = 0; i < buffers.size(); ++i){
+        std::unique_ptr<Request> request = camera->createRequest();
+        if(!request){
+            std::cerr << "Can't create request\n";
+            return -ENOMEM;
+        }
+
+        const std::unique_ptr<FrameBuffer> &buffer = buffers[i];
+        int ret = request->addBuffer(stream, buffer.get());
+        if(ret < 0){
+            std::cerr << "Can't set buffer for request\n";
+            return ret;
+        }
+
+        requests.push_back(std::move(request));
+    }
+
     // Cleanup
     camera->stop();
+    allocator->free(stream);
     allocator.reset();
     camera->release();
     camera.reset();
