@@ -16,3 +16,5 @@ add_library(display display/Display.cpp)
 add_executable(camera_hello camera/hello.cpp)
 target_compile_features(camera_hello PRIVATE cxx_std_17)
 target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA)
+# Text to speech
+add_subdirectory(tts)

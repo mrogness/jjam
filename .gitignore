@@ -34,4 +34,9 @@ ocr_app
 .DS_Store
 
 #cache
-*.cache
+*.cachebuild/
+build-tts/
+output/
+*.mp3
+*.onnx
+*.onnx.json
