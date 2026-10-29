@@ -35,16 +35,24 @@ private:
 
 int main() {
   display::Display main_display("Main Display", true);
-  Button button;
+  Button pButton;
+  Button oButton;
+  Button lButton;
 
   // Register callback functions to run when button is pressed.
-  button.add_on_press_callback([&main_display]() {
-    std::cout << "Button pressed: " << main_display.show_preview_feed() << "\n";
+  pButton.add_on_press_callback([&main_display]() {
+    std::cout << "pButton pressed: " << main_display.show_preview_feed() << "\n";
   });
 
   // For demonstration purposes, but this will have to become more
   // complicated as we add more functionality
-  std::cout << "Type 'p' to simulate button press, 'q' to quit.\n";
+  oButton.add_on_press_callback([&main_display]() {
+    std::cout << "oButton pressed: " << main_display.show_ocr_status() << "\n";
+  });
+  lButton.add_on_press_callback([&main_display]() {
+    std::cout << "lButton pressed: " << main_display.show_tts_status() << "\n";
+  });
+  std::cout << "Type 'p' to simulate preview, 'o' to simulate ocr, 'l' to simulate tts, 'q' to quit.\n";
   std::string input;
   while (std::getline(std::cin, input)) {
     if (input == "q") {
@@ -52,9 +60,13 @@ int main() {
     }
 
     if (input == "p") {
-      button.press();
+      pButton.press();
+    } else if (input =="o") {
+      oButton.press();
+    } else if (input == "l") {
+      lButton.press();
     } else {
-      std::cout << "Unknown input. Use 'p' or 'q'.\n";
+      std::cout << "Unknown input. Use 'p', 'o', 'l' or 'q'.\n";
     }
   }
 
