@@ -32,3 +32,6 @@ ocr_app
 
 # OS files
 .DS_Store
+
+#cache
+*.cache
