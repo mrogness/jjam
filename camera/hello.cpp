@@ -89,7 +89,7 @@ static void requestComplete(Request *request){
             // of the image as well. Then, use the mmap Linux library with a nullptr to get the address of the
             // camera data.
             const FrameBuffer::Plane &plane = buffer->planes()[0];
-            const size_t jpegSize = metadata.planes()[0].bytesused;
+            const size_t imgSize = metadata.planes()[0].bytesused;
             const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
 
             void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
@@ -103,7 +103,7 @@ static void requestComplete(Request *request){
             const unsigned char *data = static_cast<const unsigned char *>(mapping) + plane.offset;
 
             // Other guardrails. If these activate, unmap
-            if(jpegSize == 0 || jpegSize > plane.length){
+            if(imgSize == 0 || imgSize > plane.length){
                 munmap(mapping, mappingEnd);
                 throw std::runtime_error("Invalid JPEG size");
             }
@@ -112,23 +112,34 @@ static void requestComplete(Request *request){
                 throw std::runtime_error("Could not prepare buffer for reading");
             }
 
-            // Prepare file
-            std::ofstream outFile("capture.jpg", std::ios::binary);
-            bool fileWritten = false;
+            // Properties of image data
+            unsigned int width = cfg.size.width;
+            unsigned int height = cfg.size.height;
+            unsigned int stride = cfg.stride;
+            
+            // Get mappings of all frames of YUV
+            const unsigned char *baseMapping = static_cast<const unsigned char *>(mapping);
+            const unsigned char *yData = baseMapping + buffer->planes()[0].offset;
+            const unsigned char *uData = baseMapping + buffer->planes()[1].offset;
+            const unsigned char *vData = baseMapping + buffer->planes()[2].offset;
 
-            // Write if we can
-            if(outFile){
-                outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(jpegSize));
-                outFile.close();
-                fileWritten = static_cast<bool>(outFile);
-            }
+            // Prepare file
+            // std::ofstream outFile("capture.jpg", std::ios::binary);
+            // bool fileWritten = false;
+
+            // // Write if we can
+            // if(outFile){
+            //     outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(imgSize));
+            //     outFile.close();
+            //     fileWritten = static_cast<bool>(outFile);
+            // }
 
             // Sync up cache, cleanup
             const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
             const int unmap = munmap(mapping, mappingEnd);
-            if(!fileWritten || syncResult == -1 || unmap == -1){
-                throw std::runtime_error("Error while saving JPEG file");
-            }
+            // if(!fileWritten || syncResult == -1 || unmap == -1){
+            //     throw std::runtime_error("Error while saving JPEG file");
+            // }
         }
     }
 
