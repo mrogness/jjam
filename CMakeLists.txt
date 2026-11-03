@@ -16,7 +16,7 @@ find_package(PNGwriter 0.7.0 CONFIG)
 
 # Camera Hello
 add_executable(camera_hello camera/hello.cpp)
-target_compile_features(camera_hello PRIVATE cxx_std_17)
+target_compile_features(camera_hello PRIVATE cxx_std_20)
 target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA PNGwriter::PNGwriter)
 
 set(WAVESHARE_C_ROOT "${CMAKE_SOURCE_DIR}/third_party/LCD_Module_RPI_code/RaspberryPi/c"
