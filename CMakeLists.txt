@@ -8,6 +8,17 @@ pkg_check_modules(LIBCAMERA REQUIRED IMPORTED_TARGET libcamera)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Camera Hello
+add_executable(camera_hello camera/hello.cpp)
+target_compile_features(camera_hello PRIVATE cxx_std_17)
+
+# PNGwriter
+list(PREPEND CMAKE_PREFIX_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/camera/pngwriter"
+)
+find_package(PNGwriter 0.7.0 CONFIG)
+target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA PNGwriter::PNGwriter)
+
 set(WAVESHARE_C_ROOT "${CMAKE_SOURCE_DIR}/third_party/LCD_Module_RPI_code/RaspberryPi/c"
     CACHE PATH "Path to Waveshare RaspberryPi/c directory")
 
@@ -69,11 +80,6 @@ endif()
 target_link_libraries(display PRIVATE ${LGPIO_LIBRARY} pthread m)
 
 message(STATUS "Display backend: Waveshare C library (DEV/lgpio)")
-
-# Camera Hello
-add_executable(camera_hello camera/hello.cpp)
-target_compile_features(camera_hello PRIVATE cxx_std_17)
-target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA)
 
 
 # Find libcamera and add it

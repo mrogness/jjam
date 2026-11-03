@@ -1,19 +1,51 @@
+#include <cstddef>
 #include <iomanip>
+#include <ios>
 #include <iostream>
-#include <libcamera/framebuffer.h>
-#include <libcamera/request.h>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
+#include <fstream>
+#include <filesystem>
+#include <cstdio>
 
 #include <libcamera/libcamera.h>
+#include <libcamera/framebuffer.h>
+#include <libcamera/request.h>
+
+#include <sys/mman.h>
+#include <linux/dma-buf.h>
+#include <sys/ioctl.h>
+#include <cerrno>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
 
 // Required to store and share all available cameras through libcamera
 static std::shared_ptr<Camera> camera;
+
+/*
+Sync CPU to buffer in order to ensure proper cacheing when reading JPEG data
+
+@param fileDescriptor Descriptor of type of image data. Probably equivalent of MJPEG
+@param flags Flags of how CPU should sync to buffer
+ */
+static int syncBuffer(int fileDescriptor, __u64 flags){
+    // Create sync object to tell the kernel to sync the buffer. Give it our flags
+    dma_buf_sync sync{};
+    sync.flags = flags;
+
+    // Send message to kernel. Continue to do so if necessary
+    int result;
+    do{
+        result = ioctl(fileDescriptor, DMA_BUF_IOCTL_SYNC, &sync);
+    }
+    while(result == -1 && (errno == EINTR || errno == EAGAIN));
+
+    return result;
+}
 
 static void requestComplete(Request *request){
     // Ignore if the request was cancelled
@@ -40,6 +72,64 @@ static void requestComplete(Request *request){
         }
 
         std::cout << std::endl;
+
+        std::filesystem::path existingFile = "./capture.jpg";
+        if(!exists(existingFile)){
+            const StreamConfiguration &cfg = bufferPair.first->configuration();
+            // std::cout << "Format: " << cfg.pixelFormat.toString()
+            //     << ", width: " << cfg.size.width
+            //     << ", height: " << cfg.size.height
+            //     << ", stride: " << cfg.stride
+            //     << ", memory planes: " << buffer->planes().size()
+            //     << '\n';
+
+            // Get data about storage in memory to prepare to read
+            //
+            // We're going to need the size of the full image for writing the file. We need the location of the end
+            // of the image as well. Then, use the mmap Linux library with a nullptr to get the address of the
+            // camera data.
+            const FrameBuffer::Plane &plane = buffer->planes()[0];
+            const size_t jpegSize = metadata.planes()[0].bytesused;
+            const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+
+            void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
+
+            // Check if mapping failed
+            if(mapping == MAP_FAILED){
+                throw std::runtime_error("Failed to map camera buffer");
+            }
+
+            // Finally, get data pointer
+            const unsigned char *data = static_cast<const unsigned char *>(mapping) + plane.offset;
+
+            // Other guardrails. If these activate, unmap
+            if(jpegSize == 0 || jpegSize > plane.length){
+                munmap(mapping, mappingEnd);
+                throw std::runtime_error("Invalid JPEG size");
+            }
+            if(syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ) == -1){
+                munmap(mapping, mappingEnd);
+                throw std::runtime_error("Could not prepare buffer for reading");
+            }
+
+            // Prepare file
+            std::ofstream outFile("capture.jpg", std::ios::binary);
+            bool fileWritten = false;
+
+            // Write if we can
+            if(outFile){
+                outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(jpegSize));
+                outFile.close();
+                fileWritten = static_cast<bool>(outFile);
+            }
+
+            // Sync up cache, cleanup
+            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
+            const int unmap = munmap(mapping, mappingEnd);
+            if(!fileWritten || syncResult == -1 || unmap == -1){
+                throw std::runtime_error("Error while saving JPEG file");
+            }
+        }
     }
 
     // Reuse buffers and request
@@ -85,6 +175,12 @@ int main(){
     config->validate();
     std::cout << "Validated config: " << streamConfig.toString() << std::endl;
     camera->configure(config.get());
+
+    // Delete existing capture file if exists
+    std::filesystem::path existingCapture = "./capture.jpg";
+    if(exists(existingCapture)){
+        std::remove("./capture.jpg");
+    }
 
     // Allocate frame buffer
     auto allocator = std::make_unique<FrameBufferAllocator>(camera);
