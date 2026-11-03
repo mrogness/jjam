@@ -128,8 +128,20 @@ static void requestComplete(Request *request){
             // of the image as well. Then, use the mmap Linux library with a nullptr to get the address of the
             // camera data.
             const FrameBuffer::Plane &plane = buffer->planes()[0];
-            const size_t imgSize = metadata.planes()[0].bytesused;
-            const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+            const std::size_t imgSize = metadata.planes()[0].bytesused;
+            // const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+            std::size_t mappingEnd = 0;
+
+            for(const auto &plane : buffer->planes()){
+                if (plane.fd.get() != plane.fd.get()) {
+                    throw std::runtime_error(
+                        "Planes use different descriptors; map them separately"
+                    );
+                }
+
+                const std::size_t thisEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+                mappingEnd = std::max(mappingEnd, thisEnd);
+            }
 
             void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
 
