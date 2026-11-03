@@ -1,13 +1,17 @@
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
-#include <libcamera/framebuffer.h>
-#include <libcamera/request.h>
 #include <map>
 #include <memory>
 #include <thread>
 #include <vector>
+#include <fstream>
 
 #include <libcamera/libcamera.h>
+#include <libcamera/framebuffer.h>
+#include <libcamera/request.h>
+
+#include <sys/mman.h>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
@@ -40,6 +44,21 @@ static void requestComplete(Request *request){
         }
 
         std::cout << std::endl;
+
+        const StreamConfiguration &cfg = bufferPair.first->configuration();
+        // std::cout << "Format: " << cfg.pixelFormat.toString()
+        //     << ", width: " << cfg.size.width
+        //     << ", height: " << cfg.size.height
+        //     << ", stride: " << cfg.stride
+        //     << ", memory planes: " << buffer->planes().size()
+        //     << '\n';
+
+        // Get data about storage in memory to prepare to read
+        const FrameBuffer::Plane &plane = buffer->planes()[0];
+        const size_t jpegSize = metadata.planes()[0].bytesused;
+        const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+
+        void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
     }
 
     // Reuse buffers and request
