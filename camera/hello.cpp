@@ -22,6 +22,7 @@
 #include <cerrno>
 
 #include <libyuv.h>
+#include <pngwriter.h>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
@@ -48,6 +49,36 @@ static int syncBuffer(int fileDescriptor, __u64 flags){
     while(result == -1 && (errno == EINTR || errno == EAGAIN));
 
     return result;
+}
+
+static void writePNG(const unsigned char *data, std::size_t bytesAvailable, int width, int height, std::size_t stride, const char *filename){
+    // Use PNGwrite to write RGB info to PNG file
+    if(!data || width < 1 || height < 1){
+        throw std::runtime_error("Invalid image info");
+    }
+
+    const std::size_t rowBytes = static_cast<std::size_t>(width) * 3;
+    if(stride < rowBytes){
+        throw std::runtime_error("Invalid image info: stride too small");
+    }
+
+    if(bytesAvailable < rowBytes || static_cast<std::size_t>(height - 1) > (bytesAvailable - rowBytes) / stride){
+        throw std::runtime_error("Invalid image info: buffer too small");
+    }
+
+    // Write file
+    pngwriter writer(width, height, 0, filename);
+
+    for(int y = 0; y < height; ++y){
+        const unsigned char *row = data + static_cast<std::size_t>(y) * stride;
+        
+        for(int x = 0; x < width; ++x){
+            const unsigned char *pixel = row + static_cast<std::size_t>(x) * 3;
+            writer.plot(x + 1, height - y, pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0);
+        }
+    }
+
+    writer.close();
 }
 
 static void requestComplete(Request *request){
@@ -129,20 +160,27 @@ static void requestComplete(Request *request){
 
             // Expected RGB properties
             const int rgbStride = width * 3;
-            std::vector<std::uint8_t> rgb(static_cast<std::size_t>(rgbStride) * height);
+            std::vector<std::uint8_t> rgbData(static_cast<std::size_t>(rgbStride) * height);
 
             // Convert YUV to RGB with libyuv
             int rgbConversion = libyuv::I420ToRAW(
                 yData, stride,
                 uData, uvStride,
                 vData, uvStride,
-                rgb.data(), rgbStride,
+                rgbData.data(), rgbStride,
                 width, height
             );
+
+            // Sync up cache, done reading data from buffer
+            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
+            const int unmap = munmap(mapping, mappingEnd);
+
             if(rgbConversion == 0){
                 munmap(mapping, mappingEnd);
                 throw std::runtime_error("Error converting YUV to RGB");
             }
+
+            writePNG(rgbData.data(), rgbData.size(), width, height, rgbStride, "capture.png");
 
             // Prepare file
             // std::ofstream outFile("capture.jpg", std::ios::binary);
@@ -155,9 +193,6 @@ static void requestComplete(Request *request){
             //     fileWritten = static_cast<bool>(outFile);
             // }
 
-            // Sync up cache, cleanup
-            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
-            const int unmap = munmap(mapping, mappingEnd);
             // if(!fileWritten || syncResult == -1 || unmap == -1){
             //     throw std::runtime_error("Error while saving JPEG file");
             // }
