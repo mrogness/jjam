@@ -5,6 +5,12 @@
 #include <vector>
 
 #include "../display/display.h"
+#include "../ocr/ocr.h"
+
+// Integration points for the camera and TTS modules. 
+// Mostly just included something as a placeholder
+bool captureImage(const std::string &imagePath);
+void processAndPlayAudio(const std::string &textPath);
 
 class Button {
   /**
@@ -34,17 +40,52 @@ private:
 };
 
 int main() {
+  // Hardware initialization and setup goes here
   display::Display main_display("Main Display", true);
-  Button button;
+  Button pButton;
+  Button oButton;
+  Button lButton;
+  const std::string imagePath = "capture.jpg";
+  const std::string textPath = "ocr/text/text_out.txt";
+  bool textReady = false;
+
+  //lambda function to process and play audio from the OCR text file -- should from tts probably?
+  const auto playAudio = [&]() {
+    if (!textReady) {
+      std::cout << "Capture and recognize a page first.\n";
+      return;
+    }
+    std::cout << main_display.show_tts_status() << "\n";
+    processAndPlayAudio(textPath);
+  };
 
   // Register callback functions to run when button is pressed.
-  button.add_on_press_callback([&main_display]() {
-    std::cout << "Button pressed: " << main_display.show_preview_feed() << "\n";
+  pButton.add_on_press_callback([&main_display]() {
+    std::cout << "pButton pressed: " << main_display.show_preview_feed() << "\n";
   });
 
-  // For demonstration purposes, but this will have to become more
-  // complicated as we add more functionality
-  std::cout << "Type 'p' to simulate button press, 'q' to quit.\n";
+  // One press runs the stages in order. A failed stage stops this reading.
+  oButton.add_on_press_callback([&]() {
+    textReady = false;
+    std::cout << "Capturing image...\n";
+    if (!captureImage(imagePath)) {
+      std::cout << "Camera capture failed.\n";
+      return;
+    }
+
+    std::cout << main_display.show_ocr_status() << "\n";
+    if (!runOCR(imagePath, textPath)) {
+      std::cout << "OCR failed.\n";
+      return;
+    }
+
+    textReady = true;
+    playAudio();
+  });
+  lButton.add_on_press_callback(playAudio);
+  std::cout << "Type 'p' for preview status, 'o' to capture/read/speak, "
+               "'l' to process/play the latest text again, or 'q' to quit, "
+               "then press Enter.\n";
   std::string input;
   while (std::getline(std::cin, input)) {
     if (input == "q") {
@@ -52,9 +93,13 @@ int main() {
     }
 
     if (input == "p") {
-      button.press();
+      pButton.press();
+    } else if (input =="o") {
+      oButton.press();
+    } else if (input == "l") {
+      lButton.press();
     } else {
-      std::cout << "Unknown input. Use 'p' or 'q'.\n";
+      std::cout << "Unknown input. Use 'p', 'o', 'l' or 'q'.\n";
     }
   }
 
