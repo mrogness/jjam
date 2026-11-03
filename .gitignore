@@ -35,3 +35,6 @@ ocr_app
 
 #cache
 *.cache
+
+# Test images
+*.jpg

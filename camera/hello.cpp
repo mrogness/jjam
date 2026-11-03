@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -96,6 +97,34 @@ static void requestComplete(Request *request){
 
         // Finally, get data pointer
         const unsigned char *data = static_cast<const unsigned char *>(mapping) + plane.offset;
+
+        // Other guardrails. If these activate, unmap
+        if(jpegSize == 0 || jpegSize > plane.length){
+            munmap(mapping, mappingEnd);
+            throw std::runtime_error("Invalid JPEG size");
+        }
+        if(syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ) == -1){
+            munmap(mapping, mappingEnd);
+            throw std::runtime_error("Could not prepare buffer for reading");
+        }
+
+        // Prepare file
+        std::ofstream outFile("capture.jpg", std::ios::binary);
+        bool fileWritten = false;
+
+        // Write if we can
+        if(outFile){
+            outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(jpegSize));
+            outFile.close();
+            fileWritten = static_cast<bool>(outFile);
+        }
+
+        // Sync up cache, cleanup
+        const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
+        const int unmap = munmap(mapping, mappingEnd);
+        if(!fileWritten || syncResult == -1 || unmap == -1){
+            throw std::runtime_error("Error while saving JPEG file");
+        }
     }
 
     // Reuse buffers and request
