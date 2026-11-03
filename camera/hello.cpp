@@ -70,14 +70,12 @@ static void writePNG(const unsigned char *data, std::size_t bytesAvailable, int 
     std::cout << "init writer\n";
     pngwriter writer(width, height, 0, filename);
 
+    std::cout << "plot loop\n";
     for(int y = 0; y < height; ++y){
-        std::cout << "loop height\n";
         const unsigned char *row = data + static_cast<std::size_t>(y) * stride;
         
         for(int x = 0; x < width; ++x){
-            std::cout << "loop width\n";
             const unsigned char *pixel = row + static_cast<std::size_t>(x) * 3;
-            std::cout << "plot\n";
             writer.plot(x + 1, height - y, pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0);
         }
     }
