@@ -171,6 +171,24 @@ static void requestComplete(Request *request){
             std::vector<std::uint8_t> rgbData(static_cast<std::size_t>(rgbStride) * height);
 
             std::cout << "Convert to RGB\n";
+
+            // debug
+            const auto &planes = buffer->planes();
+
+            std::cout << "mapping=" << mapping
+                    << ", mappingLength=" << mappingEnd
+                    << std::endl;
+
+            for (std::size_t i = 0; i < planes.size(); ++i) {
+                const auto &plane = planes[i];
+
+                std::cout << "Plane " << i
+                        << ": fd=" << plane.fd.get()
+                        << ", offset=" << plane.offset
+                        << ", length=" << plane.length
+                        << std::endl;
+            }
+
             // Convert YUV to RGB with libyuv
             int rgbConversion = libyuv::I420ToRAW(
                 yData, stride,
