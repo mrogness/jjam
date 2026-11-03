@@ -67,17 +67,22 @@ static void writePNG(const unsigned char *data, std::size_t bytesAvailable, int 
     }
 
     // Write file
+    std::cout << "init writer\n";
     pngwriter writer(width, height, 0, filename);
 
     for(int y = 0; y < height; ++y){
+        std::cout << "loop height\n";
         const unsigned char *row = data + static_cast<std::size_t>(y) * stride;
         
         for(int x = 0; x < width; ++x){
+            std::cout << "loop width\n";
             const unsigned char *pixel = row + static_cast<std::size_t>(x) * 3;
+            std::cout << "plot\n";
             writer.plot(x + 1, height - y, pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0);
         }
     }
 
+    std::cout << "close writer\n";
     writer.close();
 }
 
@@ -146,22 +151,26 @@ static void requestComplete(Request *request){
                 throw std::runtime_error("Could not prepare buffer for reading");
             }
 
+            std::cout << "Get image property data\n";
             // Properties of image data
             const unsigned int width = static_cast<int>(cfg.size.width);
             const unsigned int height = static_cast<int>(cfg.size.height);
             const unsigned int stride = static_cast<int>(cfg.stride);
             const unsigned int uvStride = stride / 2;
             
+            std::cout << "Get YUV mapings\n";
             // Get mappings of all frames of YUV
             const unsigned char *baseMapping = static_cast<const unsigned char *>(mapping);
             const unsigned char *yData = baseMapping + buffer->planes()[0].offset;
             const unsigned char *uData = baseMapping + buffer->planes()[1].offset;
             const unsigned char *vData = baseMapping + buffer->planes()[2].offset;
 
+            std::cout << "Set RGB Expecteds\n";
             // Expected RGB properties
             const int rgbStride = width * 3;
             std::vector<std::uint8_t> rgbData(static_cast<std::size_t>(rgbStride) * height);
 
+            std::cout << "Convert to RGB\n";
             // Convert YUV to RGB with libyuv
             int rgbConversion = libyuv::I420ToRAW(
                 yData, stride,
@@ -171,6 +180,7 @@ static void requestComplete(Request *request){
                 width, height
             );
 
+            std::cout << "Sync CPU cash, unmap\n";
             // Sync up cache, done reading data from buffer
             const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
             const int unmap = munmap(mapping, mappingEnd);
@@ -180,6 +190,7 @@ static void requestComplete(Request *request){
                 throw std::runtime_error("Error converting YUV to RGB");
             }
 
+            std::cout << "write png\n";
             writePNG(rgbData.data(), rgbData.size(), width, height, rgbStride, "capture.png");
 
             // Prepare file
