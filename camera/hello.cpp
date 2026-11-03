@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <ios>
 #include <iostream>
+#include <libyuv/convert_argb.h>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -19,6 +20,8 @@
 #include <linux/dma-buf.h>
 #include <sys/ioctl.h>
 #include <cerrno>
+
+#include <libyuv.h>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
@@ -113,15 +116,33 @@ static void requestComplete(Request *request){
             }
 
             // Properties of image data
-            unsigned int width = cfg.size.width;
-            unsigned int height = cfg.size.height;
-            unsigned int stride = cfg.stride;
+            const unsigned int width = static_cast<int>(cfg.size.width);
+            const unsigned int height = static_cast<int>(cfg.size.height);
+            const unsigned int stride = static_cast<int>(cfg.stride);
+            const unsigned int uvStride = stride / 2;
             
             // Get mappings of all frames of YUV
             const unsigned char *baseMapping = static_cast<const unsigned char *>(mapping);
             const unsigned char *yData = baseMapping + buffer->planes()[0].offset;
             const unsigned char *uData = baseMapping + buffer->planes()[1].offset;
             const unsigned char *vData = baseMapping + buffer->planes()[2].offset;
+
+            // Expected RGB properties
+            const int rgbStride = width * 3;
+            std::vector<std::uint8_t> rgb(static_cast<std::size_t>(rgbStride) * height);
+
+            // Convert YUV to RGB with libyuv
+            int rgbConversion = libyuv::I420ToRAW(
+                yData, stride,
+                uData, uvStride,
+                vData, uvStride,
+                rgb.data(), rgbStride,
+                width, height
+            );
+            if(rgbConversion == 0){
+                munmap(mapping, mappingEnd);
+                throw std::runtime_error("Error converting YUV to RGB");
+            }
 
             // Prepare file
             // std::ofstream outFile("capture.jpg", std::ios::binary);
