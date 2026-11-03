@@ -3,6 +3,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 #include <fstream>
@@ -54,11 +55,23 @@ static void requestComplete(Request *request){
         //     << '\n';
 
         // Get data about storage in memory to prepare to read
+        //
+        // We're going to need the size of the full image for writing the file. We need the location of the end
+        // of the image as well. Then, use the mmap Linux library with a nullptr to get the address of the
+        // camera data.
         const FrameBuffer::Plane &plane = buffer->planes()[0];
         const size_t jpegSize = metadata.planes()[0].bytesused;
         const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
 
         void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
+
+        // Check if mapping failed
+        if(mapping == MAP_FAILED){
+            throw std::runtime_error("Failed to map camera buffer");
+        }
+
+        // Finally, get data pointer
+        const unsigned char *data = static_cast<const unsigned char *>(mapping) + plane.offset;
     }
 
     // Reuse buffers and request
