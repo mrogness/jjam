@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(TesseractExample)
+add_compile_options(-DWAVESHARE_C_ROOT=/home/jjam/jjam/third_party/LCD_Module_RPI_code/RaspberryPi/c -DWAVESHARE_DRIVER_LIB=DEV)
 
 # Find libcamera and add it
 find_package(PkgConfig REQUIRED)
