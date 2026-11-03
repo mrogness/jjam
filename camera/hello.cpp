@@ -13,12 +13,36 @@
 #include <libcamera/request.h>
 
 #include <sys/mman.h>
+#include <linux/dma-buf.h>
+#include <sys/ioctl.h>
+#include <cerrno>
 
 using namespace libcamera;
 using namespace std::chrono_literals;
 
 // Required to store and share all available cameras through libcamera
 static std::shared_ptr<Camera> camera;
+
+/*
+Sync CPU to buffer in order to ensure proper cacheing when reading JPEG data
+
+@param fileDescriptor Descriptor of type of image data. Probably equivalent of MJPEG
+@param flags Flags of how CPU should sync to buffer
+ */
+static int syncBuffer(int fileDescriptor, __u64 flags){
+    // Create sync object to tell the kernel to sync the buffer. Give it our flags
+    dma_buf_sync sync{};
+    sync.flags = flags;
+
+    // Send message to kernel. Continue to do so if necessary
+    int result;
+    do{
+        result = ioctl(fileDescriptor, DMA_BUF_IOCTL_SYNC, &sync);
+    }
+    while(result == -1 && (errno == EINTR || errno == EAGAIN));
+
+    return result;
+}
 
 static void requestComplete(Request *request){
     // Ignore if the request was cancelled
