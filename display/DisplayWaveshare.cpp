@@ -80,6 +80,11 @@ void Display::render_status_screen(const std::string &status_text,
   flush();
 }
 
+void Display::show_status(const std::string &text) {
+  std::cout << text << std::endl;
+  render_status_screen(text, BLUE, WHITE);
+}
+
 std::string Display::show_tts_status() {
   render_status_screen("TTS READY", BLUE, WHITE);
   return "TTS status displayed";
