@@ -1,3 +1,4 @@
+#include "PNGImgWrite.h"
 #include <cstddef>
 #include <iomanip>
 #include <ios>
@@ -30,6 +31,9 @@ using namespace std::chrono_literals;
 // Required to store and share all available cameras through libcamera
 static std::shared_ptr<Camera> camera;
 
+// Define PNGImgWriter
+PNGImgWrite imgWriter;
+
 /*
 Sync CPU to buffer in order to ensure proper cacheing when reading JPEG data
 
@@ -51,39 +55,6 @@ static int syncBuffer(int fileDescriptor, __u64 flags){
     return result;
 }
 
-static void writePNG(const unsigned char *data, std::size_t bytesAvailable, int width, int height, std::size_t stride, const char *filename){
-    // Use PNGwrite to write RGB info to PNG file
-    if(!data || width < 1 || height < 1){
-        throw std::runtime_error("Invalid image info");
-    }
-
-    const std::size_t rowBytes = static_cast<std::size_t>(width) * 3;
-    if(stride < rowBytes){
-        throw std::runtime_error("Invalid image info: stride too small");
-    }
-
-    if(bytesAvailable < rowBytes || static_cast<std::size_t>(height - 1) > (bytesAvailable - rowBytes) / stride){
-        throw std::runtime_error("Invalid image info: buffer too small");
-    }
-
-    // Write file
-    std::cout << "init writer\n";
-    pngwriter writer(width, height, 0, filename);
-
-    std::cout << "plot loop\n";
-    for(int y = 0; y < height; ++y){
-        const unsigned char *row = data + static_cast<std::size_t>(y) * stride;
-        
-        for(int x = 0; x < width; ++x){
-            const unsigned char *pixel = row + static_cast<std::size_t>(x) * 3;
-            writer.plot(x + 1, height - y, pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0);
-        }
-    }
-
-    std::cout << "close writer\n";
-    writer.close();
-}
-
 static void requestComplete(Request *request){
     // Ignore if the request was cancelled
     if(request->status() == Request::RequestCancelled){
@@ -94,6 +65,7 @@ static void requestComplete(Request *request){
     const std::map<const Stream *, FrameBuffer *> &buffers = request->buffers();
 
     // Iterate to access metadata and contents of buffers
+    bool picAssembled = false;
     for(auto bufferPair : buffers){
         FrameBuffer *buffer = bufferPair.second;
         const FrameMetadata &metadata = buffer->metadata();
@@ -111,7 +83,7 @@ static void requestComplete(Request *request){
         std::cout << std::endl;
 
         std::filesystem::path existingFile = "./capture.png";
-        if(!exists(existingFile) && metadata.sequence >= 60){
+        if(!picAssembled && metadata.sequence >= 60){
             const StreamConfiguration &cfg = bufferPair.first->configuration();
             // std::cout << "Format: " << cfg.pixelFormat.toString()
             //     << ", width: " << cfg.size.width
@@ -198,18 +170,11 @@ static void requestComplete(Request *request){
             if(rgbConversion != 0){
                 throw std::runtime_error("Error converting YUV to RGB");
             }
-
-            const auto [minIt, maxIt] = std::minmax_element(rgbData.begin(), rgbData.end());
-            double sum = 0.0;
-            for (std::uint8_t value : rgbData)
-                sum += value;
-            std::cout << "RGB min: " << static_cast<int>(*minIt)
-                << ", max: " << static_cast<int>(*maxIt)
-                << ", mean: " << sum / rgbData.size()
-                << '\n';
-
-            std::cout << "write png\n";
-            writePNG(rgbData.data(), rgbData.size(), width, height, rgbStride, "capture.png");
+            
+            picAssembled = true;
+            
+            // Set imgWriter
+            PNGImgWrite imgWriter(rgbData, rgbData.size(), width, height, rgbStride, "capture.png");
 
             // Prepare file
             // std::ofstream outFile("capture.jpg", std::ios::binary);
@@ -325,6 +290,11 @@ int main(){
 
     // libcamera starts in its own thread; let it do its thing before shutting down
     std::this_thread::sleep_for(5000ms);
+
+    // Write PNG
+    std::cout << "write png\n";
+    imgWriter.writePNG();
+    std::cout << "done writing png\n";
 
     // Cleanup
     camera->stop();
