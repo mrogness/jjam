@@ -1,23 +1,26 @@
 #include "PNGImgWrite.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include <pngwriter.h>
 
-PNGImgWrite::PNGImgWrite(std::vector<std::uint8_t>& data,
-                std::size_t bytesAvailable,
+PNGImgWrite::PNGImgWrite(std::vector<std::uint8_t> rgbData,
                 int width,
                 int height,
                 std::size_t stride,
                 const char *filename)
-        : data(data.data()),
-        bytesAvailable(bytesAvailable),
+        : rgbData(rgbData),
         width(width),
         height(height),
         stride(stride),
-        filename(filename) {}
+        filename(filename) {
+            data = this->rgbData.data();
+        }
 
 void PNGImgWrite::writePNG() {
+    std::size_t bytesAvailable = this->rgbData.size();
+    
     // Use PNGwrite to write RGB info to PNG file
     if (!data || width < 1 || height < 1) {
         throw std::runtime_error("Invalid image info");

@@ -1,7 +1,6 @@
 #include "PNGImgWrite.h"
 #include <cstddef>
 #include <iomanip>
-#include <ios>
 #include <iostream>
 #include <libyuv/convert_argb.h>
 #include <map>
@@ -9,9 +8,9 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <fstream>
 #include <filesystem>
 #include <cstdio>
+#include <future>
 
 #include <libcamera/libcamera.h>
 #include <libcamera/framebuffer.h>
@@ -32,7 +31,7 @@ using namespace std::chrono_literals;
 static std::shared_ptr<Camera> camera;
 
 // Define PNGImgWriter
-PNGImgWrite imgWriter;
+static std::promise<std::unique_ptr<PNGImgWrite>> writerPromise;
 
 /*
 Sync CPU to buffer in order to ensure proper cacheing when reading JPEG data
@@ -174,7 +173,8 @@ static void requestComplete(Request *request){
             picAssembled = true;
             
             // Set imgWriter
-            PNGImgWrite imgWriter(rgbData, rgbData.size(), width, height, rgbStride, "capture.png");
+            //(rgbData, rgbData.size(), width, height, rgbStride, "capture.png");
+            auto writer = std::make_unique<PNGImgWrite>(std::move(rgbData), static_cast<int>(width), static_cast<int>(height), rgbStride, "capture.png");
 
             // Prepare file
             // std::ofstream outFile("capture.jpg", std::ios::binary);
@@ -261,6 +261,9 @@ int main(){
     const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
     std::vector<std::unique_ptr<Request>> requests;
 
+    // Get future PNGImgWrite
+    auto writerFuture = writerPromise.get_future();
+
     // Create requests
     for(unsigned int i = 0; i < buffers.size(); ++i){
         std::unique_ptr<Request> request = camera->createRequest();
@@ -288,16 +291,18 @@ int main(){
         camera->queueRequest(request.get());
     }
 
+    auto writer = writerFuture.get();
+
     // libcamera starts in its own thread; let it do its thing before shutting down
     std::this_thread::sleep_for(5000ms);
+    camera->stop();
 
     // Write PNG
     std::cout << "write png\n";
-    imgWriter.writePNG();
+    writer->writePNG();
     std::cout << "done writing png\n";
 
     // Cleanup
-    camera->stop();
     allocator->free(stream);
     allocator.reset();
     camera->release();
