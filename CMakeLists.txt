@@ -17,8 +17,9 @@ find_package(PNGwriter 0.7.0 CONFIG)
 # Camera Hello
 add_executable(camera_hello camera/hello.cpp)
 target_compile_features(camera_hello PRIVATE cxx_std_20)
-target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA PNGwriter::PNGwriter)
-
+find_library(LIBYUV_LIBRARY NAMES yuv REQUIRED)
+target_link_libraries(camera_hello PRIVATE PkgConfig::LIBCAMERA PNGwriter::PNGwriter ${LIBYUV_LIBRARY})
+target_sources(camera_hello PRIVATE camera/PNGImgWrite.cpp)
 set(WAVESHARE_C_ROOT "${CMAKE_SOURCE_DIR}/third_party/LCD_Module_RPI_code/RaspberryPi/c"
     CACHE PATH "Path to Waveshare RaspberryPi/c directory")
 

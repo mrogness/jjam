@@ -1,15 +1,16 @@
+#include "PNGImgWrite.h"
 #include <cstddef>
 #include <iomanip>
-#include <ios>
 #include <iostream>
+#include <libyuv/convert_argb.h>
 #include <map>
 #include <memory>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <fstream>
 #include <filesystem>
 #include <cstdio>
+#include <future>
 
 #include <libcamera/libcamera.h>
 #include <libcamera/framebuffer.h>
@@ -20,11 +21,17 @@
 #include <sys/ioctl.h>
 #include <cerrno>
 
+#include <libyuv.h>
+#include <pngwriter.h>
+
 using namespace libcamera;
 using namespace std::chrono_literals;
 
 // Required to store and share all available cameras through libcamera
 static std::shared_ptr<Camera> camera;
+
+// Define PNGImgWriter
+static std::promise<std::unique_ptr<PNGImgWrite>> writerPromise;
 
 /*
 Sync CPU to buffer in order to ensure proper cacheing when reading JPEG data
@@ -57,6 +64,7 @@ static void requestComplete(Request *request){
     const std::map<const Stream *, FrameBuffer *> &buffers = request->buffers();
 
     // Iterate to access metadata and contents of buffers
+    bool picAssembled = false;
     for(auto bufferPair : buffers){
         FrameBuffer *buffer = bufferPair.second;
         const FrameMetadata &metadata = buffer->metadata();
@@ -73,8 +81,8 @@ static void requestComplete(Request *request){
 
         std::cout << std::endl;
 
-        std::filesystem::path existingFile = "./capture.jpg";
-        if(!exists(existingFile)){
+        std::filesystem::path existingFile = "./capture.png";
+        if(!picAssembled && metadata.sequence == 60){
             const StreamConfiguration &cfg = bufferPair.first->configuration();
             // std::cout << "Format: " << cfg.pixelFormat.toString()
             //     << ", width: " << cfg.size.width
@@ -89,8 +97,20 @@ static void requestComplete(Request *request){
             // of the image as well. Then, use the mmap Linux library with a nullptr to get the address of the
             // camera data.
             const FrameBuffer::Plane &plane = buffer->planes()[0];
-            const size_t jpegSize = metadata.planes()[0].bytesused;
-            const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+            const std::size_t imgSize = metadata.planes()[0].bytesused;
+            // const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+            std::size_t mappingEnd = 0;
+
+            for(const auto &thisPlane : buffer->planes()){
+                if (thisPlane.fd.get() != plane.fd.get()) {
+                    throw std::runtime_error(
+                        "Planes use different descriptors; map them separately"
+                    );
+                }
+
+                const std::size_t thisEnd = static_cast<std::size_t>(thisPlane.offset) + thisPlane.length;
+                mappingEnd = std::max(mappingEnd, thisEnd);
+            }
 
             void *mapping = mmap(nullptr, mappingEnd, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
 
@@ -103,7 +123,7 @@ static void requestComplete(Request *request){
             const unsigned char *data = static_cast<const unsigned char *>(mapping) + plane.offset;
 
             // Other guardrails. If these activate, unmap
-            if(jpegSize == 0 || jpegSize > plane.length){
+            if(imgSize == 0 || imgSize > plane.length){
                 munmap(mapping, mappingEnd);
                 throw std::runtime_error("Invalid JPEG size");
             }
@@ -112,23 +132,54 @@ static void requestComplete(Request *request){
                 throw std::runtime_error("Could not prepare buffer for reading");
             }
 
-            // Prepare file
-            std::ofstream outFile("capture.jpg", std::ios::binary);
-            bool fileWritten = false;
+            std::cout << "Get image property data\n";
+            // Properties of image data
+            const unsigned int width = static_cast<int>(cfg.size.width);
+            const unsigned int height = static_cast<int>(cfg.size.height);
+            const unsigned int stride = static_cast<int>(cfg.stride);
+            const unsigned int uvStride = stride / 2;
+            
+            std::cout << "Get YUV mapings\n";
+            // Get mappings of all frames of YUV
+            const unsigned char *baseMapping = static_cast<const unsigned char *>(mapping);
+            const unsigned char *yData = baseMapping + buffer->planes()[0].offset;
+            const unsigned char *uData = baseMapping + buffer->planes()[1].offset;
+            const unsigned char *vData = baseMapping + buffer->planes()[2].offset;
 
-            // Write if we can
-            if(outFile){
-                outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(jpegSize));
-                outFile.close();
-                fileWritten = static_cast<bool>(outFile);
-            }
+            std::cout << "Set RGB Expecteds\n";
+            // Expected RGB properties
+            const int rgbStride = width * 3;
+            std::vector<std::uint8_t> rgbData(static_cast<std::size_t>(rgbStride) * height);
 
-            // Sync up cache, cleanup
-            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
+            std::cout << "Convert to RGB\n";
+            // Convert YUV to RGB with libyuv
+            int rgbConversion = libyuv::I420ToRAW(
+                yData, stride,
+                uData, uvStride,
+                vData, uvStride,
+                rgbData.data(), rgbStride,
+                width, height
+            );
+
+            std::cout << "Sync CPU cash, unmap\n";
+            // Sync up cache, done reading data from buffer
+            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
             const int unmap = munmap(mapping, mappingEnd);
-            if(!fileWritten || syncResult == -1 || unmap == -1){
-                throw std::runtime_error("Error while saving JPEG file");
+
+            if(rgbConversion != 0){
+                throw std::runtime_error("Error converting YUV to RGB");
             }
+            
+            picAssembled = true;
+            
+            // Set imgWriter
+            //(rgbData, rgbData.size(), width, height, rgbStride, "capture.png");
+            auto writer = std::make_unique<PNGImgWrite>(std::move(rgbData), static_cast<int>(width), static_cast<int>(height), rgbStride, "capture.png");
+            // Deliver the writer to main().
+            writerPromise.set_value(std::move(writer));
+
+            // This one-shot capture is finished.
+            return;
         }
     }
 
@@ -200,6 +251,9 @@ int main(){
     const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
     std::vector<std::unique_ptr<Request>> requests;
 
+    // Get future PNGImgWrite
+    auto writerFuture = writerPromise.get_future();
+
     // Create requests
     for(unsigned int i = 0; i < buffers.size(); ++i){
         std::unique_ptr<Request> request = camera->createRequest();
@@ -227,15 +281,25 @@ int main(){
         camera->queueRequest(request.get());
     }
 
+    auto writer = writerFuture.get();
+
     // libcamera starts in its own thread; let it do its thing before shutting down
-    std::this_thread::sleep_for(3000ms);
+    // std::this_thread::sleep_for(5000ms);
 
     // Cleanup
     camera->stop();
     allocator->free(stream);
     allocator.reset();
+    config.reset();
     camera->release();
     camera.reset();
+    cameras.clear();
     camManager->stop();
+
+    // Write PNG
+    std::cout << "write png\n";
+    writer->writePNG();
+    std::cout << "done writing png\n";
+    
     return 0;
 }
