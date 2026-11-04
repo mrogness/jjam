@@ -110,7 +110,7 @@ static void requestComplete(Request *request){
 
         std::cout << std::endl;
 
-        std::filesystem::path existingFile = "./capture.jpg";
+        std::filesystem::path existingFile = "./capture.png";
         if(!exists(existingFile)){
             const StreamConfiguration &cfg = bufferPair.first->configuration();
             // std::cout << "Format: " << cfg.pixelFormat.toString()
