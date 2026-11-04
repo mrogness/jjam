@@ -111,7 +111,7 @@ static void requestComplete(Request *request){
         std::cout << std::endl;
 
         std::filesystem::path existingFile = "./capture.png";
-        if(!exists(existingFile)){
+        if(!exists(existingFile) && metadata.sequence >= 60){
             const StreamConfiguration &cfg = bufferPair.first->configuration();
             // std::cout << "Format: " << cfg.pixelFormat.toString()
             //     << ", width: " << cfg.size.width
@@ -130,8 +130,8 @@ static void requestComplete(Request *request){
             // const size_t mappingEnd = static_cast<std::size_t>(plane.offset) + plane.length;
             std::size_t mappingEnd = 0;
 
-            for(const auto &plane : buffer->planes()){
-                if (plane.fd.get() != plane.fd.get()) {
+            for(const auto &thisPlane : buffer->planes()){
+                if (thisPlane.fd.get() != plane.fd.get()) {
                     throw std::runtime_error(
                         "Planes use different descriptors; map them separately"
                     );
@@ -192,13 +192,21 @@ static void requestComplete(Request *request){
 
             std::cout << "Sync CPU cash, unmap\n";
             // Sync up cache, done reading data from buffer
-            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
+            const int syncResult = syncBuffer(plane.fd.get(), DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
             const int unmap = munmap(mapping, mappingEnd);
 
             if(rgbConversion != 0){
-                munmap(mapping, mappingEnd);
                 throw std::runtime_error("Error converting YUV to RGB");
             }
+
+            const auto [minIt, maxIt] = std::minmax_element(rgbData.begin(), rgbData.end());
+            double sum = 0.0;
+            for (std::uint8_t value : rgbData)
+                sum += value;
+            std::cout << "RGB min: " << static_cast<int>(*minIt)
+                << ", max: " << static_cast<int>(*maxIt)
+                << ", mean: " << sum / rgbData.size()
+                << '\n';
 
             std::cout << "write png\n";
             writePNG(rgbData.data(), rgbData.size(), width, height, rgbStride, "capture.png");
