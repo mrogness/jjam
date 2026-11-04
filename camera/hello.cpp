@@ -324,7 +324,7 @@ int main(){
     }
 
     // libcamera starts in its own thread; let it do its thing before shutting down
-    std::this_thread::sleep_for(3000ms);
+    std::this_thread::sleep_for(5000ms);
 
     // Cleanup
     camera->stop();
