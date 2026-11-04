@@ -137,7 +137,7 @@ static void requestComplete(Request *request){
                     );
                 }
 
-                const std::size_t thisEnd = static_cast<std::size_t>(plane.offset) + plane.length;
+                const std::size_t thisEnd = static_cast<std::size_t>(plane.offset) + thisPlane.length;
                 mappingEnd = std::max(mappingEnd, thisEnd);
             }
 
