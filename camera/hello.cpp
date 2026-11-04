@@ -180,21 +180,6 @@ static void requestComplete(Request *request){
 
             // This one-shot capture is finished.
             return;
-
-            // Prepare file
-            // std::ofstream outFile("capture.jpg", std::ios::binary);
-            // bool fileWritten = false;
-
-            // // Write if we can
-            // if(outFile){
-            //     outFile.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(imgSize));
-            //     outFile.close();
-            //     fileWritten = static_cast<bool>(outFile);
-            // }
-
-            // if(!fileWritten || syncResult == -1 || unmap == -1){
-            //     throw std::runtime_error("Error while saving JPEG file");
-            // }
         }
     }
 
@@ -305,8 +290,10 @@ int main(){
     camera->stop();
     allocator->free(stream);
     allocator.reset();
+    config.reset();
     camera->release();
     camera.reset();
+    cameras.clear();
     camManager->stop();
 
     // Write PNG
