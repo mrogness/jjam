@@ -175,6 +175,11 @@ static void requestComplete(Request *request){
             // Set imgWriter
             //(rgbData, rgbData.size(), width, height, rgbStride, "capture.png");
             auto writer = std::make_unique<PNGImgWrite>(std::move(rgbData), static_cast<int>(width), static_cast<int>(height), rgbStride, "capture.png");
+            // Deliver the writer to main().
+            writerPromise.set_value(std::move(writer));
+
+            // This one-shot capture is finished.
+            return;
 
             // Prepare file
             // std::ofstream outFile("capture.jpg", std::ios::binary);
@@ -294,7 +299,7 @@ int main(){
     auto writer = writerFuture.get();
 
     // libcamera starts in its own thread; let it do its thing before shutting down
-    std::this_thread::sleep_for(5000ms);
+    // std::this_thread::sleep_for(5000ms);
 
     // Cleanup
     camera->stop();
