@@ -295,18 +295,19 @@ int main(){
 
     // libcamera starts in its own thread; let it do its thing before shutting down
     std::this_thread::sleep_for(5000ms);
-    camera->stop();
-
-    // Write PNG
-    std::cout << "write png\n";
-    writer->writePNG();
-    std::cout << "done writing png\n";
 
     // Cleanup
+    camera->stop();
     allocator->free(stream);
     allocator.reset();
     camera->release();
     camera.reset();
     camManager->stop();
+
+    // Write PNG
+    std::cout << "write png\n";
+    writer->writePNG();
+    std::cout << "done writing png\n";
+    
     return 0;
 }
