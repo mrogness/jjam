@@ -1,0 +1,9 @@
+cd ~/jjam
+
+cmake -S . -B build-app \
+  -DPIPER_EXECUTABLE="$HOME/.local/share/pipx/venvs/piper-tts/bin/piper" \
+  -DPIPER_MODEL="$HOME/piper-voices/en_US-ryan-low.onnx"
+
+cmake --build build-app --target ocr_app --parallel 1
+
+./build-app/ocr_app
