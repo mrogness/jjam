@@ -79,8 +79,19 @@ target_link_libraries(display PRIVATE ${LGPIO_LIBRARY} pthread m)
 
 message(STATUS "Display backend: Waveshare C library (DEV/lgpio)")
 
-add_executable(ocr_app src/main.cpp)
+pkg_check_modules(TESSERACT REQUIRED IMPORTED_TARGET tesseract)
+pkg_check_modules(LEPTONICA REQUIRED IMPORTED_TARGET lept)
+
+add_executable(ocr_app src/main.cpp ocr/ocr.cpp)
 target_link_libraries(ocr_app PRIVATE display)
 
 # Text to speech
 add_subdirectory(tts)
+
+target_link_libraries(ocr_app PRIVATE tts PkgConfig::TESSERACT PkgConfig::LEPTONICA)
+add_dependencies(ocr_app camera_hello)
+target_compile_definitions(ocr_app PRIVATE
+    CAMERA_EXECUTABLE="$<TARGET_FILE:camera_hello>"
+    PIPER_EXECUTABLE_DEFAULT="${PIPER_EXECUTABLE}"
+    PIPER_MODEL_DEFAULT="${PIPER_MODEL}"
+)

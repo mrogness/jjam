@@ -27,6 +27,7 @@ public:
   Display(const Display &) = delete;
   Display &operator=(const Display &) = delete;
 
+  void show_status(const std::string &text);
   std::string show_tts_status();
   std::string show_ocr_status();
   std::string show_preview_feed();
