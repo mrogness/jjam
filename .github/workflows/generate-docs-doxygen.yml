@@ -1,4 +1,5 @@
 name: Generate Docs with Doxygen
+
 on: 
   pull_request:
   push:
