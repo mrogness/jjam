@@ -24,12 +24,35 @@
 */
 var NAVTREE =
 [
-  [ "JJAM", "index.html", ]
+  [ "JJAM", "index.html", [
+    [ "TTS module", "md_tts_README.html", [
+      [ "Setup (Raspberry Pi)", "md_tts_README.html#autotoc_md1", null ],
+      [ "Build", "md_tts_README.html#autotoc_md2", null ],
+      [ "Run", "md_tts_README.html#autotoc_md3", null ],
+      [ "Using it from other code", "md_tts_README.html#autotoc_md4", null ]
+    ] ],
+    [ "JJAM testing", "md_tests_README_testing.html", [
+      [ "Run tests", "md_tests_README_testing.html#autotoc_md6", null ],
+      [ "Add a test suite", "md_tests_README_testing.html#autotoc_md7", null ],
+      [ "Mock a dependency", "md_tests_README_testing.html#autotoc_md8", null ]
+    ] ],
+    [ "Classes", "annotated.html", [
+      [ "Class List", "annotated.html", "annotated_dup" ],
+      [ "Class Index", "classes.html", null ],
+      [ "Class Members", "functions.html", [
+        [ "All", "functions.html", null ],
+        [ "Functions", "functions_func.html", null ]
+      ] ]
+    ] ],
+    [ "Files", "files.html", [
+      [ "File List", "files.html", "files_dup" ]
+    ] ]
+  ] ]
 ];
 
 var NAVTREEINDEX =
 [
-"index.html"
+"PNGImgWrite_8h_source.html"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';
