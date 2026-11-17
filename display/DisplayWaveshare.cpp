@@ -27,6 +27,8 @@ Display::Display(std::string display_name, bool initialized)
   if (!display_initialized) {
     std::cerr << "Display init failed for " << this->display_name
               << "; running without LCD output.\n";
+  } else {
+    flush();
   }
 }
 
@@ -47,7 +49,6 @@ bool Display::initialize_spi_display() {
   Paint_SetRotate(ROTATE_270);
   Paint_SelectImage(reinterpret_cast<UWORD *>(frame_buffer.data()));
   Paint_Clear(WHITE);
-  flush();
   return true;
 }
 
