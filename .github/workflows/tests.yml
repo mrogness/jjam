@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure
+        run: >-
+          cmake -S . -B build-tests
+          -DJJAM_BUILD_APP=OFF -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build-tests --parallel 2
+      - name: Test
+        run: ctest --test-dir build-tests --output-on-failure --no-tests=error

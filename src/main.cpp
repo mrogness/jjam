@@ -3,6 +3,7 @@
 #include <csignal>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -13,6 +14,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "hardware_loop.h"
 #include "../display/display.h"
 #include "../ocr/ocr.h"
 #include "tts/tts_pipeline.h"
@@ -102,35 +104,6 @@ private:
   pid_t child_;
 };
 
-// false requests application exit; true returns to the idle loop.
-bool playSentences(const std::vector<tts::SentenceAudio> &audio,
-                   display::Display &screen) {
-  if (audio.empty()) {
-    screen.show_status("No text found");
-    return true;
-  }
-  std::cout << "Playback: n=next, b=previous, r=restart sentence, "
-               "s=stop, q=quit (then Enter).\n";
-  for (std::size_t i = 0; i < audio.size();) {
-    screen.show_status("Speaking " + std::to_string(i + 1) + "/" +
-                       std::to_string(audio.size()));
-    std::cout << "[" << i + 1 << "/" << audio.size() << "] "
-              << audio[i].sentence << std::endl;
-    Player player(audio[i].mp3Path);
-    for (;;) {
-      if (player.finished()) { ++i; break; }
-      const auto command = readCommand(100);
-      if (!command) continue;
-      if (*command == "q") return false;
-      if (*command == "s") return true;
-      if (*command == "n") { ++i; break; }
-      if (*command == "b") { if (i > 0) --i; break; }
-      if (*command == "r") break;
-    }
-    // Player destruction stops the old sentence before starting another.
-  }
-  return true;
-}
 } // namespace
 
 int main() {
@@ -138,46 +111,27 @@ int main() {
   const fs::path imagePath = "capture.png";
   const fs::path textPath = "ocr/text/text_out.txt";
   const fs::path outputDir = "output";
-  std::vector<tts::SentenceAudio> audio;
-  bool running = true;
-  std::cout << "Run from the repository root. Commands require Enter.\n"
-               "o=capture/read/speak, l=replay, p=preview status, q=quit\n";
-  screen.show_status("Ready: o + Enter");
-  while (running) {
-    try {
-      const auto command = readCommand(-1);
-      if (!command) continue;
-      if (*command == "q") break;
-      if (*command == "p") { screen.show_preview_feed(); continue; }
-      if (*command == "o") {
-        // Invalidate the previous page even if capture or synthesis fails.
-        audio.clear();
-        const tts::PiperTTS piper(PIPER_EXECUTABLE_DEFAULT, PIPER_MODEL_DEFAULT);
+  std::unique_ptr<tts::PiperTTS> piper;
+  std::unique_ptr<Player> player;
+  hardware::LoopServices services{
+      readCommand,
+      [&] {
+        // Validate the voice and prepare output before starting a new capture.
+        piper = std::make_unique<tts::PiperTTS>(PIPER_EXECUTABLE_DEFAULT,
+                                               PIPER_MODEL_DEFAULT);
         fs::create_directories(textPath.parent_path());
-        screen.show_status("Capturing...");
-        if (!captureImage(imagePath)) throw std::runtime_error("Camera capture failed");
-        screen.show_status("Recognizing...");
-        if (!runOCR(imagePath.string(), textPath.string()))
-          throw std::runtime_error("OCR failed");
-        screen.show_status("Creating speech");
-        // Finish synthesis first, so next/previous can access every sentence.
-        audio = tts::textFileToMp3s(
-            textPath, outputDir, piper,
-            [&](std::size_t i, std::size_t total, const tts::SentenceAudio &) {
-              screen.show_status("TTS " + std::to_string(i) + "/" +
-                                 std::to_string(total));
-            });
-        running = playSentences(audio, screen);
-      } else if (*command == "l") {
-        running = playSentences(audio, screen);
-      } else {
-        std::cout << "Use o, l, p, or q, then Enter.\n";
-      }
-      if (running && !audio.empty()) screen.show_status("Ready: o or l");
-    } catch (const std::exception &error) {
-      std::cerr << "Error: " << error.what() << '\n';
-      screen.show_status("Error: see console");
-    }
-  }
+        return captureImage(imagePath);
+      },
+      [&] { return runOCR(imagePath.string(), textPath.string()); },
+      [&](const tts::SentenceReadyCallback &onReady) {
+        return tts::textFileToMp3s(textPath, outputDir, *piper, onReady);
+      },
+      [&](const fs::path &path) { player = std::make_unique<Player>(path); },
+      [&] { return player->finished(); },
+      [&] { player.reset(); },
+      [&](const std::string &text) { screen.show_status(text); },
+      [&] { screen.show_preview_feed(); }
+  };
+  hardware::runHardwareLoop(services, std::cout, std::cerr);
   return 0;
 }
